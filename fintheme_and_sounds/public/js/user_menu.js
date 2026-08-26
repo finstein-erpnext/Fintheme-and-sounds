@@ -33,10 +33,23 @@
     }));
   }
 
+  function isLogoutItem(item) {
+    if (!item) return false;
+    if (item.name === "logout") return true;
+    // v16.32's sidebar user menu builds its items with a `label` only -- no
+    // `name` -- so fall back to matching the label. Resolve "Logout" through
+    // __() so this still matches on a translated Desk, and keep the English
+    // spellings as a backstop for locales where the string is untranslated.
+    const label = String(item.label || "").trim().toLowerCase();
+    if (!label) return false;
+    const translated = String(
+      typeof __ === "function" ? __("Logout") : "Logout"
+    ).trim().toLowerCase();
+    return label === translated || label === "logout" || label === "log out";
+  }
+
   function isUserMenu(items) {
-    return (
-      Array.isArray(items) && items.some((item) => item && item.name === "logout")
-    );
+    return Array.isArray(items) && items.some(isLogoutItem);
   }
 
   function withOurItems(items) {
@@ -45,11 +58,12 @@
     const names = new Set(registry.map((entry) => entry.name));
     const next = items.filter((item) => !(item && names.has(item.name)));
 
-    const logoutIndex = next.findIndex((item) => item && item.name === "logout");
+    const logoutIndex = next.findIndex(isLogoutItem);
     if (logoutIndex === -1) return next;
 
-    // Frappe puts a divider immediately before Logout; insert above it so our
-    // items group with Settings/Reload rather than with Logout.
+    // Where Frappe puts a divider immediately before Logout, insert above it so
+    // our items group with the rest rather than with Logout. v16.32's menu has
+    // no divider, in which case we simply land directly above Logout.
     const prev = next[logoutIndex - 1];
     const insertAt = prev && prev.is_divider ? logoutIndex - 1 : logoutIndex;
 

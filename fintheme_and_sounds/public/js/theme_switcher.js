@@ -430,6 +430,17 @@
     });
   }
 
+  // One-click entry point: an icon beside the notifications bell on /desk, and
+  // a row in the sidebar on every other route (v16 never shows both at once).
+  if (window.fintheme && window.fintheme.addQuickAction) {
+    window.fintheme.addQuickAction({
+      name: "customize-theme",
+      label: () => __("Customize Theme"),
+      icon: "palette",
+      onClick: openSwitcher,
+    });
+  }
+
   // Keep a programmatic entry point for the console and for other bundles.
   window.openThemeSwitcher = openSwitcher;
 })();

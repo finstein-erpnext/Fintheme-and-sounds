@@ -116,8 +116,130 @@
     installHook();
   }
 
+  // ---------------------------------------------------------------------
+  // Quick-access buttons
+  //
+  // v16 splits the Desk chrome across two containers that are never both on
+  // screen: `header.desktop-navbar` (which holds the bell) exists only on the
+  // /desk home screen, while `.body-sidebar` covers every other route. To get
+  // a one-click entry point everywhere we inject into whichever is present,
+  // and re-check on SPA route changes because both are re-rendered.
+  // ---------------------------------------------------------------------
+
+  const quickActions = [];
+
+  function icon(name) {
+    return `<svg class="icon icon-md" aria-hidden="true"><use href="#icon-${name}"></use></svg>`;
+  }
+
+  function label(entry) {
+    return typeof entry.label === "function" ? entry.label() : entry.label;
+  }
+
+  function injectNavbar(entry) {
+    const bar = document.querySelector("header.desktop-navbar > .flex");
+    if (!bar) return;
+    const cls = "fintheme-quick-" + entry.name;
+    if (bar.querySelector("." + cls)) return;
+
+    const wrap = document.createElement("div");
+    wrap.className = "fintheme-quick " + cls;
+    const btn = document.createElement("button");
+    // Same classes the bell uses, so we inherit the Desk's own button styling.
+    btn.className = "btn-reset nav-link text-muted";
+    btn.setAttribute("aria-label", label(entry));
+    btn.setAttribute("title", label(entry));
+    btn.innerHTML = icon(entry.icon);
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      entry.onClick();
+    });
+    wrap.appendChild(btn);
+
+    // Sit to the left of the notifications bell.
+    const bell = bar.querySelector(".desktop-notifications");
+    if (bell) bar.insertBefore(wrap, bell);
+    else bar.appendChild(wrap);
+  }
+
+  function injectSidebar(entry) {
+    const bottom = document.querySelector(".body-sidebar-bottom");
+    if (!bottom) return;
+    const cls = "fintheme-side-" + entry.name;
+    if (bottom.querySelector("." + cls)) return;
+
+    // Mirror the markup of the "Getting Started" row so it reads as native.
+    const row = document.createElement("p");
+    row.className = "fintheme-side-row";
+    const a = document.createElement("a");
+    a.className = "onboarding-sidebar px-2 " + cls;
+    a.style.cursor = "pointer";
+    a.innerHTML = icon(entry.icon) + " <span>" + label(entry) + "</span>";
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      entry.onClick();
+    });
+    row.appendChild(a);
+
+    const onboarding = bottom.querySelector("p:has(.onboarding-sidebar)");
+    if (onboarding && onboarding.parentElement === bottom) {
+      bottom.insertBefore(row, onboarding.nextSibling);
+    } else {
+      bottom.insertBefore(row, bottom.firstChild);
+    }
+  }
+
+  function refreshQuickActions() {
+    for (const entry of quickActions) {
+      try {
+        injectNavbar(entry);
+        injectSidebar(entry);
+      } catch (err) {
+        console.error("Fintheme: quick action injection failed", entry.name, err);
+      }
+    }
+  }
+
+  let observing = false;
+  function watchForContainers() {
+    if (observing || !document.body) return;
+    observing = true;
+    // Both containers are re-rendered on navigation; a debounced observer keeps
+    // the buttons present without polling forever.
+    let pending = null;
+    new MutationObserver(() => {
+      if (pending) return;
+      pending = setTimeout(() => {
+        pending = null;
+        refreshQuickActions();
+      }, 150);
+    }).observe(document.body, { childList: true, subtree: true });
+  }
+
+  /**
+   * Register a one-click Desk button (navbar on /desk, sidebar elsewhere).
+   * @param {{name: string, label: string|function, icon: string, onClick: function}} entry
+   */
+  function addQuickAction(entry) {
+    if (!entry || !entry.name) return;
+    const at = quickActions.findIndex((e) => e.name === entry.name);
+    if (at !== -1) quickActions[at] = entry;
+    else quickActions.push(entry);
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", () => {
+        watchForContainers();
+        refreshQuickActions();
+      });
+    } else {
+      watchForContainers();
+      refreshQuickActions();
+    }
+  }
+
   window.fintheme = window.fintheme || {};
   window.fintheme.addUserMenuItem = addUserMenuItem;
+  window.fintheme.addQuickAction = addQuickAction;
 
   // Install at parse time, NOT on frappe.ready. app_include_js is emitted near
   // the end of desk.html (v16.32 line 65) and runs while the document is still
